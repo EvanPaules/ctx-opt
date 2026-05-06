@@ -1,5 +1,8 @@
 # ctx-opt
 
+[![CI](https://github.com/EvanPaules/ctx-opt/actions/workflows/ci.yml/badge.svg)](https://github.com/EvanPaules/ctx-opt/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Intelligent context window optimization middleware for LLM applications. Drop it in
 front of any chat-completion call: it takes a `messages[]` array, trims or compresses
 it to fit a token budget, and returns the optimized array plus metadata describing

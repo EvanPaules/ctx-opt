@@ -1,0 +1,44 @@
+{
+  "name": "ctx-opt",
+  "version": "0.1.0",
+  "description": "Intelligent context window optimization middleware for LLM applications",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsup --watch"
+  },
+  "keywords": ["llm", "context-window", "tokens", "ai", "middleware", "openai", "anthropic"],
+  "author": "Evan Paules <evanmpaules@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EvanPaules/ctx-opt.git"
+  },
+  "bugs": {
+    "url": "https://github.com/EvanPaules/ctx-opt/issues"
+  },
+  "homepage": "https://github.com/EvanPaules/ctx-opt#readme",
+  "dependencies": {
+    "js-tiktoken": "^1.0.12"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  }
+}

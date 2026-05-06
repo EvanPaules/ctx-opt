@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/ctx-opt.svg)](https://www.npmjs.com/package/ctx-opt)
 [![CI](https://github.com/EvanPaules/ctx-opt/actions/workflows/ci.yml/badge.svg)](https://github.com/EvanPaules/ctx-opt/actions/workflows/ci.yml)
-[![bundle size](https://img.shields.io/bundlephobia/minzip/ctx-opt)](https://bundlephobia.com/package/ctx-opt)
+[![install size](https://packagephobia.com/badge?p=ctx-opt)](https://packagephobia.com/result?p=ctx-opt)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Intelligent context window optimization middleware for LLM applications. Drop it in

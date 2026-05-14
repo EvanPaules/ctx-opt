@@ -128,6 +128,39 @@ describe('ContextOptimizer', () => {
   });
 });
 
+describe('ContextOptimizer fellBackTo', () => {
+  it('surfaces fellBackTo in meta when summarizer falls back to sliding-window', async () => {
+    const messages = bigMessages(10);
+    const tokens = countMessageTokens(messages);
+    const opt = new ContextOptimizer({
+      maxTokens: Math.floor(tokens / 4),
+      strategy: 'summarizer',
+      recentWindow: 4,
+      summarizer: {
+        llmCall: async () => {
+          throw new Error('outage');
+        },
+        triggerThreshold: 0.5,
+      },
+    });
+    const r = await opt.optimize(messages);
+    expect(r.meta.fellBackTo).toBe('sliding-window');
+    expect(r.meta.strategyUsed).toBe('summarizer');
+  });
+
+  it('does not set fellBackTo on a clean strategy run', async () => {
+    const messages = bigMessages(10);
+    const tokens = countMessageTokens(messages);
+    const opt = new ContextOptimizer({
+      maxTokens: Math.floor(tokens / 4),
+      strategy: 'sliding-window',
+      slidingWindow: { size: 4 },
+    });
+    const r = await opt.optimize(messages);
+    expect(r.meta.fellBackTo).toBeUndefined();
+  });
+});
+
 describe('ContextOptimizer config', () => {
   it('updateConfig changes future behavior', async () => {
     const messages = bigMessages(20);

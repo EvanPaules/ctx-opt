@@ -10,7 +10,20 @@ export interface Message {
 export type ContentBlock =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
-  | { type: 'tool_result'; tool_use_id: string; content: string };
+  | { type: 'tool_result'; tool_use_id: string; content: string }
+  /**
+   * Catch-all for provider blocks ctx-opt doesn't natively understand
+   * (image, file, audio, video, etc.). The original block is preserved
+   * verbatim in `raw` so it round-trips back to the SDK unchanged.
+   */
+  | {
+      type: 'passthrough';
+      raw: unknown;
+      /** Best-effort token count for budget math. Defaults to 500 if omitted. */
+      estimatedTokens?: number;
+      /** Human-readable label for logs / meta (e.g. "image", "file"). */
+      kind?: string;
+    };
 
 export type MessageClass =
   | 'system'
@@ -52,6 +65,13 @@ export interface OptimizerConfig {
     triggerThreshold?: number;
     /** Overrides config.recentWindow for this strategy only. */
     recentWindow?: number;
+    /**
+     * Behavior when llmCall throws (timeout, rate limit, etc.).
+     * - `'fall-back'` (default): silently fall back to sliding-window for this call.
+     * - `'throw'`: propagate the error.
+     * - function: custom handler called with the error before falling back to sliding-window.
+     */
+    onError?: 'fall-back' | 'throw' | ((err: unknown) => void);
   };
 
   relevance?: {
@@ -95,4 +115,10 @@ export interface OptimizeMeta {
   inputCostUsd?: number;
   /** Estimated USD saved on input cost vs the unoptimized array. Undefined if model pricing is unknown. */
   savedUsd?: number;
+  /**
+   * Set when the requested strategy couldn't run cleanly and fell back to
+   * another. For example, `summarizer` falls back to `sliding-window` when
+   * there is no compressible material or when the llmCall throws.
+   */
+  fellBackTo?: StrategyName;
 }

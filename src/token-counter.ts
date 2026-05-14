@@ -2,6 +2,8 @@ import { getEncoding, encodingForModel, type TiktokenEncoding, type TiktokenMode
 import type { Message } from './types.js';
 import { messageToText } from './utils.js';
 
+const DEFAULT_PASSTHROUGH_TOKENS = 500;
+
 // Per-message overhead: 4 tokens approximates role + formatting tokens
 // per OpenAI's chat-completion cookbook formula (im_start, role, im_end, sep).
 const PER_MESSAGE_OVERHEAD = 4;
@@ -53,11 +55,28 @@ export function countMessageTokens(messages: Message[], model?: string): number 
   for (const m of messages) {
     total += PER_MESSAGE_OVERHEAD;
     total += countTokens(messageToText(m), model);
+    total += countPassthroughTokens(m);
     if (m.name) total += countTokens(m.name, model);
   }
   return total;
 }
 
 export function countSingleMessageTokens(message: Message, model?: string): number {
-  return PER_MESSAGE_OVERHEAD + countTokens(messageToText(message), model) + (message.name ? countTokens(message.name, model) : 0);
+  return (
+    PER_MESSAGE_OVERHEAD +
+    countTokens(messageToText(message), model) +
+    countPassthroughTokens(message) +
+    (message.name ? countTokens(message.name, model) : 0)
+  );
+}
+
+function countPassthroughTokens(message: Message): number {
+  if (typeof message.content === 'string') return 0;
+  let sum = 0;
+  for (const block of message.content) {
+    if (block.type === 'passthrough') {
+      sum += block.estimatedTokens ?? DEFAULT_PASSTHROUGH_TOKENS;
+    }
+  }
+  return sum;
 }

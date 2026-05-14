@@ -38,7 +38,12 @@ export class ContextOptimizer {
       };
     }
 
-    let result: { messages: Message[]; messagesDropped: number; messagesSummarized: number };
+    let result: {
+      messages: Message[];
+      messagesDropped: number;
+      messagesSummarized: number;
+      fellBackTo?: StrategyName;
+    };
 
     switch (strategy) {
       case 'sliding-window': {
@@ -76,6 +81,7 @@ export class ContextOptimizer {
         strategyUsed: strategy,
         messagesDropped: result.messagesDropped,
         messagesSummarized: result.messagesSummarized,
+        fellBackTo: result.fellBackTo,
       }),
     };
   }
@@ -95,10 +101,16 @@ export class ContextOptimizer {
   private async runHybrid(
     messages: Message[],
     task: string | undefined
-  ): Promise<{ messages: Message[]; messagesDropped: number; messagesSummarized: number }> {
+  ): Promise<{
+    messages: Message[];
+    messagesDropped: number;
+    messagesSummarized: number;
+    fellBackTo?: StrategyName;
+  }> {
     const model = this.config.model;
     let messagesDropped = 0;
     let messagesSummarized = 0;
+    let fellBackTo: StrategyName | undefined;
     let current = messages;
 
     if (this.config.relevance) {
@@ -114,6 +126,7 @@ export class ContextOptimizer {
       const s = await applySummarizer(current, this.config);
       messagesDropped += Math.max(0, current.length - s.messages.length - (s.messagesSummarized > 0 ? 1 : 0));
       messagesSummarized += s.messagesSummarized;
+      if (s.fellBackTo) fellBackTo = s.fellBackTo;
       current = s.messages;
     }
 
@@ -121,9 +134,10 @@ export class ContextOptimizer {
       const fb = applySlidingWindow(current, this.config);
       messagesDropped += fb.messagesDropped;
       current = fb.messages;
+      fellBackTo = 'sliding-window';
     }
 
-    return { messages: current, messagesDropped, messagesSummarized };
+    return { messages: current, messagesDropped, messagesSummarized, ...(fellBackTo ? { fellBackTo } : {}) };
   }
 
   private buildMeta(args: {
@@ -132,6 +146,7 @@ export class ContextOptimizer {
     strategyUsed: StrategyName;
     messagesDropped: number;
     messagesSummarized: number;
+    fellBackTo?: StrategyName;
   }): OptimizeMeta {
     const saved = Math.max(0, args.inputTokens - args.outputTokens);
     const pricing = resolvePricing(this.config.model, this.config.pricing);
@@ -148,6 +163,9 @@ export class ContextOptimizer {
     if (pricing) {
       meta.inputCostUsd = tokensToUsd(args.outputTokens, pricing);
       meta.savedUsd = tokensToUsd(saved, pricing);
+    }
+    if (args.fellBackTo) {
+      meta.fellBackTo = args.fellBackTo;
     }
     return meta;
   }

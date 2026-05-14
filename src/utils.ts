@@ -15,6 +15,8 @@ export function blockToText(block: ContentBlock): string {
       return `[tool_use:${block.name}] ${safeStringify(block.input)}`;
     case 'tool_result':
       return `[tool_result:${block.tool_use_id}] ${block.content}`;
+    case 'passthrough':
+      return `[${block.kind ?? 'passthrough'}]`;
   }
 }
 

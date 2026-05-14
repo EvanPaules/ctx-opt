@@ -38,6 +38,51 @@ const { messages, meta } = await optimizer.optimize(history);
 console.log(`saved ${meta.saved} tokens (${meta.compressionRatio.toFixed(2)}x)`);
 ```
 
+### One-line drop-in for OpenAI or Anthropic
+
+If you're already using one of the major SDKs, wrap your client and stop
+thinking about it:
+
+```ts
+import OpenAI from 'openai';
+import { withOptimizer } from 'ctx-opt/openai';
+
+const ai = withOptimizer(new OpenAI(), {
+  maxTokens: 8_000,
+  strategy: 'sliding-window',
+});
+
+// chat.completions.create now auto-trims `messages` to fit the budget.
+const res = await ai.chat.completions.create({
+  model: 'gpt-4o',
+  messages: longHistory,
+});
+
+console.log(ai.lastMeta); // { saved, compressionRatio, ... }
+```
+
+```ts
+import Anthropic from '@anthropic-ai/sdk';
+import { withOptimizer } from 'ctx-opt/anthropic';
+
+const ai = withOptimizer(new Anthropic(), {
+  maxTokens: 8_000,
+  strategy: 'sliding-window',
+  model: 'claude-haiku-4-5-20251001',
+});
+
+const res = await ai.messages.create({
+  model: 'claude-haiku-4-5-20251001',
+  max_tokens: 1024,
+  system: 'you are concise',
+  messages: longHistory,
+});
+```
+
+`openai` and `@anthropic-ai/sdk` are **optional peer deps** — install only
+the one you use. See [`examples/`](./examples) for OpenAI, Anthropic,
+summarizer-with-real-LLM, and LangChain.js integrations.
+
 ## Strategies
 
 | Strategy         | Speed     | Quality   | Needs LLM call? | When to use |
@@ -49,6 +94,24 @@ console.log(`saved ${meta.saved} tokens (${meta.compressionRatio.toFixed(2)}x)`)
 
 All strategies preserve the system prompt by default and never split a tool-use /
 tool-result pair across the boundary.
+
+### Benchmarks
+
+Reproducible workload: a 60-turn synthetic support conversation
+(9.8k input tokens), budget = 30% of input (2.9k tokens). Run
+`npm run bench` to regenerate.
+
+| Strategy | Output tokens | Saved | Compression | Within budget | Time |
+|---|---:|---:|---:|:---:|---:|
+| `sliding-window` | 717 | 9,147 | 92.7% | yes | 11ms |
+| `summarizer` | 628 | 9,236 | 93.6% | yes | 23ms |
+| `relevance` | 2,644 | 7,220 | 73.2% | yes | 19ms |
+| `hybrid` | 2,644 | 7,220 | 73.2% | yes | 22ms |
+
+Numbers are wall-clock on a single laptop with mock LLM + scorer (so they
+isolate `ctx-opt`'s own overhead from network latency). In production the
+LLM-using strategies will be dominated by the model round-trip, not
+ctx-opt.
 
 ## API
 
@@ -179,6 +242,10 @@ Every call to `optimize()` returns a `meta` describing what happened:
 
 For exact Anthropic counts, call Anthropic's `messages.countTokens` API and pass that
 through your own wrapper.
+
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md) for the release history.
 
 ## License
 

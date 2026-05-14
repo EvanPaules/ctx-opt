@@ -16,7 +16,7 @@ export async function applyRelevance(
   if (!relevance) {
     throw new Error('relevance config required for relevance strategy');
   }
-  const recentWindow = config.recentWindow ?? 6;
+  const recentWindow = relevance.recentWindow ?? config.recentWindow ?? 6;
   const model = config.model;
   const minScore = relevance.minScore ?? 0.2;
 

@@ -1,6 +1,6 @@
 {
   "name": "ctx-opt",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Intelligent context window optimization middleware for LLM applications",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -21,6 +21,11 @@
       "types": "./dist/adapters/anthropic.d.ts",
       "import": "./dist/adapters/anthropic.js",
       "require": "./dist/adapters/anthropic.cjs"
+    },
+    "./ai-sdk": {
+      "types": "./dist/adapters/ai-sdk.d.ts",
+      "import": "./dist/adapters/ai-sdk.js",
+      "require": "./dist/adapters/ai-sdk.cjs"
     }
   },
   "files": [
@@ -60,6 +65,7 @@
   },
   "peerDependencies": {
     "@anthropic-ai/sdk": ">=0.30.0",
+    "ai": ">=3.0.0",
     "openai": ">=4.0.0"
   },
   "peerDependenciesMeta": {
@@ -68,11 +74,15 @@
     },
     "@anthropic-ai/sdk": {
       "optional": true
+    },
+    "ai": {
+      "optional": true
     }
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
     "@types/node": "^20.11.0",
+    "ai": "^6.0.182",
     "openai": "^6.37.0",
     "tsup": "^8.0.1",
     "tsx": "^4.21.1",

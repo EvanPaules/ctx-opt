@@ -79,8 +79,23 @@ const res = await ai.messages.create({
 });
 ```
 
-`openai` and `@anthropic-ai/sdk` are **optional peer deps** — install only
-the one you use. See [`examples/`](./examples) for OpenAI, Anthropic,
+```ts
+import { generateText } from 'ai';
+import { withOptimizer } from 'ctx-opt/ai-sdk';
+
+const trimmedGenerate = withOptimizer(generateText, {
+  maxTokens: 8_000,
+  strategy: 'sliding-window',
+});
+
+const { text } = await trimmedGenerate({
+  model: openai('gpt-4o'),
+  messages: longHistory,
+});
+```
+
+`openai`, `@anthropic-ai/sdk`, and `ai` are **optional peer deps** — install
+only the one(s) you use. See [`examples/`](./examples) for OpenAI, Anthropic,
 summarizer-with-real-LLM, and LangChain.js integrations.
 
 ## Strategies
@@ -240,8 +255,20 @@ Every call to `optimize()` returns a `meta` describing what happened:
 - A **per-message overhead** of 4 tokens is added to each message to approximate the
   role and formatting tokens (per OpenAI's chat-completion cookbook formula).
 
-For exact Anthropic counts, call Anthropic's `messages.countTokens` API and pass that
-through your own wrapper.
+For exact Anthropic counts, use the built-in helper that delegates to
+Anthropic's `messages.countTokens` endpoint:
+
+```ts
+import Anthropic from '@anthropic-ai/sdk';
+import { countMessageTokensWithAnthropic } from 'ctx-opt';
+
+const client = new Anthropic();
+const tokens = await countMessageTokensWithAnthropic(
+  client,
+  messages,
+  'claude-haiku-4-5-20251001'
+);
+```
 
 ## Changelog
 

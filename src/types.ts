@@ -44,11 +44,15 @@ export interface OptimizerConfig {
     llmCall: SummarizerLLMFn;
     maxSummaryTokens?: number;
     triggerThreshold?: number;
+    /** Overrides config.recentWindow for this strategy only. */
+    recentWindow?: number;
   };
 
   relevance?: {
     scorer: RelevanceScorerFn;
     minScore?: number;
+    /** Overrides config.recentWindow for this strategy only. */
+    recentWindow?: number;
   };
 }
 

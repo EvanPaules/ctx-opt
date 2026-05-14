@@ -124,6 +124,33 @@ describe('hybrid strategy', () => {
     expect(r.meta.strategyUsed).toBe('hybrid');
   });
 
+  it('fires the summarizer in hybrid when relevance and summarizer have different recent windows', async () => {
+    // Relevance keeps a wide recent window (many always-kept messages),
+    // pushing the post-relevance set over budget. Summarizer treats a
+    // narrower window as recent, so the post-relevance set has real
+    // compressible material for llmCall to operate on.
+    const messages = longMessages(30);
+    const tokens = countMessageTokens(messages);
+    const scorer: RelevanceScorerFn = vi.fn(async (msgs) =>
+      msgs.map(() => 0.9)
+    );
+    const llmCall: SummarizerLLMFn = vi.fn(async () => 'short summary text');
+
+    const opt = new ContextOptimizer({
+      maxTokens: Math.floor(tokens / 6),
+      strategy: 'hybrid',
+      relevance: { scorer, minScore: 0.1, recentWindow: 10 },
+      summarizer: { llmCall, triggerThreshold: 0.5, recentWindow: 2 },
+    });
+
+    const r = await opt.optimize(messages, { task: 'task' });
+
+    expect(scorer).toHaveBeenCalledTimes(1);
+    expect(llmCall).toHaveBeenCalledTimes(1);
+    expect(r.meta.messagesSummarized).toBeGreaterThan(0);
+    expect(r.meta.strategyUsed).toBe('hybrid');
+  });
+
   it('always preserves system message through hybrid pipeline', async () => {
     const messages = longMessages(20);
     const tokens = countMessageTokens(messages);

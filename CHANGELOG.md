@@ -5,38 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.0] - 2026-05-14
+## [0.4.0] - 2026-05-14
 
 ### Added
+- **Cost tracking in `meta`**. When `model` is set to a known model,
+  `meta.savedUsd` and `meta.inputCostUsd` are populated with dollar
+  amounts. Built-in pricing table covers the GPT-4o family, GPT-4
+  Turbo, GPT-3.5, o1/o3, the Claude 3.5 / 4.x family, and Gemini
+  1.5 / 2.0. Override or extend via the new `pricing` config option.
+- **Built-in relevance scorers** at `ctx-opt/scorers`:
+  - `bm25Scorer()` — pure-JS BM25 keyword scoring with saturation and
+    length normalization. Zero deps, zero network calls.
+  - `createEmbeddingScorer({ embed })` — bring-your-own embedding
+    function, scores by cosine similarity. In-process LRU cache so
+    repeat optimize() calls only embed new messages.
+- **Interactive web playground** under [`playground/`](./playground).
+  Vite + React app that imports ctx-opt directly from `src/`. Paste a
+  chat history, see all four strategies trim it side-by-side with
+  tokens, savings, and cost.
 - **Vercel AI SDK adapter** at `ctx-opt/ai-sdk`. `withOptimizer(fn, config)`
-  wraps any AI SDK function (`generateText`, `streamText`, `generateObject`,
-  `streamObject`) so its `messages` array is trimmed before forwarding.
-  Also ships `trimMessages(messages, config)` for callers that prefer a
-  one-shot preprocessor.
+  wraps any AI SDK function (`generateText`, `streamText`,
+  `generateObject`, `streamObject`) so its `messages` array is trimmed
+  before forwarding. Also ships `trimMessages(messages, config)` for
+  callers that prefer a one-shot preprocessor.
 - **Streaming support** in the OpenAI and Anthropic adapters. `stream: true`
-  on `chat.completions.create` / `messages.create` now correctly returns
+  on `chat.completions.create` / `messages.create` correctly returns
   the SDK's async-iterable stream after optimization. The Anthropic
   adapter also wraps `client.messages.stream()`.
 - **Native Anthropic token counting** via `countMessageTokensWithAnthropic`,
   which delegates to `client.messages.countTokens` for exact counts on
   `claude-*` models. Tradeoff is a network round-trip per call versus
   tiktoken's free local approximation.
-- **Per-strategy `recentWindow` overrides**. `relevance.recentWindow` and
-  `summarizer.recentWindow` can now be set independently of the top-level
-  `recentWindow`. This unblocks the hybrid strategy (see below).
+- **Per-strategy `recentWindow` overrides**. `relevance.recentWindow`
+  and `summarizer.recentWindow` can now be set independently of the
+  top-level `recentWindow`.
 - `CONTRIBUTING.md`, GitHub issue templates, and a PR template.
 
 ### Fixed
-- **Hybrid strategy now actually summarizes**. Previously the relevance
-  and summarizer phases shared `recentWindow`, so the post-relevance set
-  was entirely "system + recent" with nothing left for the summarizer to
-  compress. Setting `relevance.recentWindow` larger than
+- **Hybrid strategy now actually summarizes.** Previously the relevance
+  and summarizer phases shared `recentWindow`, so the post-relevance
+  set was entirely "system + recent" with nothing left for the
+  summarizer to compress. Setting `relevance.recentWindow` larger than
   `summarizer.recentWindow` gives the summarizer real material. The
   known-limitation note from 0.2.0 is resolved.
 
 ### Changed
-- New peer dep: `ai` (optional, for the Vercel AI SDK adapter).
-- `tsup` now builds four entry points instead of three.
+- New peer deps: `ai` (Vercel AI SDK), all optional.
+- `tsup` now builds five entry points: `index`, `adapters/openai`,
+  `adapters/anthropic`, `adapters/ai-sdk`, `scorers/index`.
+- New subpath export `ctx-opt/scorers`.
+- 21 → 89 tests across releases.
 
 ## [0.2.0] - 2026-05-14
 
@@ -85,6 +103,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tool-pair preservation across boundary trims.
 - ESM + CJS builds, TypeScript types, Node 18+.
 
-[0.3.0]: https://github.com/EvanPaules/ctx-opt/releases/tag/v0.3.0
+[0.4.0]: https://github.com/EvanPaules/ctx-opt/releases/tag/v0.4.0
 [0.2.0]: https://github.com/EvanPaules/ctx-opt/releases/tag/v0.2.0
 [0.1.0]: https://github.com/EvanPaules/ctx-opt/releases/tag/v0.1.0

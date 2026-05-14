@@ -16,6 +16,7 @@ interface BenchRow {
   inputTokens: number;
   outputTokens: number;
   saved: number;
+  savedUsd?: number;
   compressionRatio: number;
   messagesDropped: number;
   messagesSummarized: number;
@@ -54,6 +55,7 @@ async function runStrategy(
   const opt = new ContextOptimizer({
     maxTokens,
     strategy,
+    model: 'gpt-4o',
     recentWindow: 6,
     slidingWindow: { size: 8 },
     summarizer: { llmCall, triggerThreshold: 0.85 },
@@ -67,6 +69,7 @@ async function runStrategy(
     inputTokens: r.meta.inputTokens,
     outputTokens: r.meta.outputTokens,
     saved: r.meta.saved,
+    savedUsd: r.meta.savedUsd,
     compressionRatio: r.meta.compressionRatio,
     messagesDropped: r.meta.messagesDropped,
     messagesSummarized: r.meta.messagesSummarized,
@@ -90,14 +93,16 @@ function fmtMs(n: number): string {
 function renderMarkdown(rows: BenchRow[], inputTokens: number, budget: number): string {
   const header = `## ctx-opt strategy benchmark
 
-**Workload:** ${TURNS} turns (${rows[0]!.inputTokens.toLocaleString()} input tokens), budget = ${budget.toLocaleString()} tokens (${Math.round(TARGET_BUDGET_RATIO * 100)}% of input).
+**Workload:** ${TURNS} turns (${rows[0]!.inputTokens.toLocaleString()} input tokens), budget = ${budget.toLocaleString()} tokens (${Math.round(TARGET_BUDGET_RATIO * 100)}% of input). Cost basis: gpt-4o ($2.50 / 1M input tokens).
 
-| Strategy | Output tokens | Saved | Compression | Dropped | Summarized | Within budget | Time |
+| Strategy | Output tokens | Saved | Cost saved (per call) | Cost saved (per 1k calls) | Compression | Within budget | Time |
 |---|---:|---:|---:|---:|---:|:---:|---:|
 `;
   const body = rows
     .map((r) => {
-      return `| \`${r.strategy}\` | ${fmtTokens(r.outputTokens)} | ${fmtTokens(r.saved)} | ${fmtPct(1 - r.compressionRatio)} | ${r.messagesDropped} | ${r.messagesSummarized} | ${r.withinBudget ? 'yes' : 'no'} | ${fmtMs(r.durationMs)} |`;
+      const usd = r.savedUsd ?? 0;
+      const usdPerThousand = usd * 1000;
+      return `| \`${r.strategy}\` | ${fmtTokens(r.outputTokens)} | ${fmtTokens(r.saved)} | $${usd.toFixed(5)} | $${usdPerThousand.toFixed(2)} | ${fmtPct(1 - r.compressionRatio)} | ${r.withinBudget ? 'yes' : 'no'} | ${fmtMs(r.durationMs)} |`;
     })
     .join('\n');
   return header + body + '\n';

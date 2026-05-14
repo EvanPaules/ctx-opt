@@ -9,6 +9,12 @@ export {
   countMessageTokensWithAnthropic,
   type AnthropicCountTokensCapable,
 } from './anthropic-tokens.js';
+export {
+  DEFAULT_PRICING,
+  resolvePricing,
+  tokensToUsd,
+  type ModelPricing,
+} from './pricing.js';
 export type {
   Role,
   Message,

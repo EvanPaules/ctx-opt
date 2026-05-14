@@ -35,6 +35,12 @@ export interface OptimizerConfig {
   model?: string;
   preserveSystem?: boolean;
   recentWindow?: number;
+  /**
+   * Per-model input pricing override (USD per 1M tokens). Merges with the
+   * built-in defaults. When the resolved model has known pricing, `meta.savedUsd`
+   * and `meta.inputCostUsd` are populated.
+   */
+  pricing?: Record<string, { inputUsdPerMillion: number }>;
 
   slidingWindow?: {
     size: number;
@@ -85,4 +91,8 @@ export interface OptimizeMeta {
   messagesDropped: number;
   messagesSummarized: number;
   withinBudget: boolean;
+  /** Estimated USD cost of the optimized input. Undefined if model pricing is unknown. */
+  inputCostUsd?: number;
+  /** Estimated USD saved on input cost vs the unoptimized array. Undefined if model pricing is unknown. */
+  savedUsd?: number;
 }

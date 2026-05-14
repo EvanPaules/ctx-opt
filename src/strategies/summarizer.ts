@@ -1,4 +1,4 @@
-import type { Message, OptimizerConfig } from '../types.js';
+import type { Message, OptimizerConfig, StrategyName } from '../types.js';
 import { countMessageTokens } from '../token-counter.js';
 import { classifyMessages } from '../classifier.js';
 import { hashMessages } from '../utils.js';
@@ -8,6 +8,8 @@ export interface SummarizerResult {
   messages: Message[];
   messagesDropped: number;
   messagesSummarized: number;
+  /** Set when summarizer couldn't run and fell back to another strategy. */
+  fellBackTo?: StrategyName;
 }
 
 const SUMMARY_INSTRUCTION =
@@ -48,6 +50,7 @@ export async function applySummarizer(
       messages: fallback.messages,
       messagesDropped: fallback.messagesDropped,
       messagesSummarized: 0,
+      fellBackTo: 'sliding-window',
     };
   }
 
@@ -56,8 +59,22 @@ export async function applySummarizer(
 
   let summaryText = summaryCache.get(cacheKey);
   if (summaryText === undefined) {
-    summaryText = await summarizer.llmCall(compressible, SUMMARY_INSTRUCTION);
-    summaryCache.set(cacheKey, summaryText);
+    try {
+      summaryText = await summarizer.llmCall(compressible, SUMMARY_INSTRUCTION);
+      summaryCache.set(cacheKey, summaryText);
+    } catch (err) {
+      const onError = summarizer.onError ?? 'fall-back';
+      if (onError === 'throw') throw err;
+      if (typeof onError === 'function') onError(err);
+      // Fall back to sliding-window for this call.
+      const fallback = applySlidingWindow(messages, config);
+      return {
+        messages: fallback.messages,
+        messagesDropped: fallback.messagesDropped,
+        messagesSummarized: 0,
+        fellBackTo: 'sliding-window',
+      };
+    }
   }
 
   const summaryMessage: Message = {
@@ -85,14 +102,17 @@ export async function applySummarizer(
 
   // If still over budget, fall back to sliding window on the summarized result.
   let finalMessages = out;
+  let fellBackTo: StrategyName | undefined;
   if (countMessageTokens(finalMessages, model) > config.maxTokens) {
     const fallback = applySlidingWindow(finalMessages, config);
     finalMessages = fallback.messages;
+    fellBackTo = 'sliding-window';
   }
 
   return {
     messages: finalMessages,
     messagesDropped: Math.max(0, messages.length - finalMessages.length),
     messagesSummarized: compressibleIndices.length,
+    ...(fellBackTo ? { fellBackTo } : {}),
   };
 }

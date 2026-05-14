@@ -11,9 +11,38 @@ export interface EmbeddingScorerOptions {
    * give them the same cacheKey. Defaults to a unique value per scorer instance.
    */
   cacheKey?: string;
+  /**
+   * Maximum number of cached embeddings before LRU eviction kicks in.
+   * Defaults to 1000. Set to 0 to disable caching entirely.
+   */
+  maxCacheSize?: number;
 }
 
+const DEFAULT_MAX_CACHE_SIZE = 1000;
+
+// Module-scoped LRU. Insertion order is the LRU order; on hit we delete + re-set.
 const moduleCache = new Map<string, number[]>();
+let cacheLimit = DEFAULT_MAX_CACHE_SIZE;
+
+function cacheGet(key: string): number[] | undefined {
+  const v = moduleCache.get(key);
+  if (v) {
+    moduleCache.delete(key);
+    moduleCache.set(key, v);
+  }
+  return v;
+}
+
+function cacheSet(key: string, value: number[]): void {
+  if (cacheLimit <= 0) return;
+  if (moduleCache.has(key)) moduleCache.delete(key);
+  moduleCache.set(key, value);
+  while (moduleCache.size > cacheLimit) {
+    const oldest = moduleCache.keys().next().value;
+    if (oldest === undefined) break;
+    moduleCache.delete(oldest);
+  }
+}
 
 /**
  * Build an embedding-based relevance scorer. Each message and the task
@@ -55,12 +84,15 @@ export function createEmbeddingScorer(
 ): RelevanceScorerFn {
   const { embed } = opts;
   const cacheKey = opts.cacheKey ?? `embedding-scorer-${Math.random().toString(36).slice(2)}`;
+  if (opts.maxCacheSize !== undefined) {
+    cacheLimit = Math.max(0, opts.maxCacheSize);
+  }
 
   return async function score(messages: Message[], task: string): Promise<number[]> {
     if (!task) return messages.map(() => 0);
 
     const texts = messages.map(messageToText);
-    const cacheHits: (number[] | undefined)[] = texts.map((t) => moduleCache.get(`${cacheKey}::${t}`));
+    const cacheHits: (number[] | undefined)[] = texts.map((t) => cacheGet(`${cacheKey}::${t}`));
     const missingIndices: number[] = [];
     const missingTexts: string[] = [];
     cacheHits.forEach((hit, i) => {
@@ -72,7 +104,7 @@ export function createEmbeddingScorer(
 
     // Always embed the task fresh; cache key includes task so different tasks don't collide.
     const taskCacheKey = `${cacheKey}::__task__::${task}`;
-    let taskEmbedding: number[] | undefined = moduleCache.get(taskCacheKey);
+    let taskEmbedding: number[] | undefined = cacheGet(taskCacheKey);
 
     const toEmbed: string[] = [];
     if (!taskEmbedding) toEmbed.push(task);
@@ -83,12 +115,12 @@ export function createEmbeddingScorer(
       let cursor = 0;
       if (!taskEmbedding) {
         taskEmbedding = fresh[cursor++];
-        if (taskEmbedding) moduleCache.set(taskCacheKey, taskEmbedding);
+        if (taskEmbedding) cacheSet(taskCacheKey, taskEmbedding);
       }
       for (const idx of missingIndices) {
         const vec = fresh[cursor++];
         if (vec) {
-          moduleCache.set(`${cacheKey}::${texts[idx]}`, vec);
+          cacheSet(`${cacheKey}::${texts[idx]}`, vec);
           cacheHits[idx] = vec;
         }
       }
@@ -107,6 +139,12 @@ export function createEmbeddingScorer(
 /** Clear the in-process embedding cache. Test helper. */
 export function _clearEmbeddingCache(): void {
   moduleCache.clear();
+  cacheLimit = DEFAULT_MAX_CACHE_SIZE;
+}
+
+/** Current cache size, for tests. */
+export function _embeddingCacheSize(): number {
+  return moduleCache.size;
 }
 
 function cosine(a: number[], b: number[]): number {

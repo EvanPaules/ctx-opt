@@ -80,6 +80,77 @@ describe('applySummarizer', () => {
     expect(r.messagesSummarized).toBeGreaterThan(0);
   });
 
+  it('falls back to sliding-window by default when llmCall throws', async () => {
+    const messages = longMessages(10);
+    const tokens = countMessageTokens(messages);
+    const llmCall: SummarizerLLMFn = vi.fn(async () => {
+      throw new Error('rate limited');
+    });
+    const config: OptimizerConfig = {
+      maxTokens: Math.floor(tokens * 0.5),
+      strategy: 'summarizer',
+      recentWindow: 4,
+      summarizer: { llmCall, triggerThreshold: 0.5 },
+    };
+    const r = await applySummarizer(messages, config);
+    expect(r.fellBackTo).toBe('sliding-window');
+    expect(r.messagesSummarized).toBe(0);
+    expect(r.messages.length).toBeLessThan(messages.length);
+  });
+
+  it('propagates the error when onError is "throw"', async () => {
+    const messages = longMessages(10);
+    const tokens = countMessageTokens(messages);
+    const llmCall: SummarizerLLMFn = async () => {
+      throw new Error('boom');
+    };
+    const config: OptimizerConfig = {
+      maxTokens: Math.floor(tokens * 0.5),
+      strategy: 'summarizer',
+      recentWindow: 4,
+      summarizer: { llmCall, triggerThreshold: 0.5, onError: 'throw' },
+    };
+    await expect(applySummarizer(messages, config)).rejects.toThrow(/boom/);
+  });
+
+  it('calls the function onError handler with the error before falling back', async () => {
+    const messages = longMessages(10);
+    const tokens = countMessageTokens(messages);
+    const onError = vi.fn();
+    const llmCall: SummarizerLLMFn = async () => {
+      throw new Error('rate limited');
+    };
+    const config: OptimizerConfig = {
+      maxTokens: Math.floor(tokens * 0.5),
+      strategy: 'summarizer',
+      recentWindow: 4,
+      summarizer: { llmCall, triggerThreshold: 0.5, onError },
+    };
+    const r = await applySummarizer(messages, config);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect((onError.mock.calls[0]![0] as Error).message).toBe('rate limited');
+    expect(r.fellBackTo).toBe('sliding-window');
+  });
+
+  it('reports fellBackTo when there is no compressible material', async () => {
+    // All messages fit in the recent window so nothing is compressible.
+    const messages: Message[] = [
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: 'one ' + 'tokens '.repeat(500) },
+      { role: 'assistant', content: 'two ' + 'tokens '.repeat(500) },
+    ];
+    const llmCall = vi.fn(async () => 'should not be called');
+    const config: OptimizerConfig = {
+      maxTokens: 100,
+      strategy: 'summarizer',
+      recentWindow: 4,
+      summarizer: { llmCall, triggerThreshold: 0.1 },
+    };
+    const r = await applySummarizer(messages, config);
+    expect(r.fellBackTo).toBe('sliding-window');
+    expect(llmCall).not.toHaveBeenCalled();
+  });
+
   it('uses cache on second call with same compressible messages', async () => {
     const messages = longMessages(10);
     const tokens = countMessageTokens(messages);

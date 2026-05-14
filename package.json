@@ -1,6 +1,6 @@
 {
   "name": "ctx-opt",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Intelligent context window optimization middleware for LLM applications",
   "type": "module",
   "main": "./dist/index.cjs",

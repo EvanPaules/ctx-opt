@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   createEmbeddingScorer,
   _clearEmbeddingCache,
+  _embeddingCacheSize,
 } from '../../src/scorers/embedding.js';
 import type { Message } from '../../src/types.js';
 
@@ -77,6 +78,47 @@ describe('createEmbeddingScorer', () => {
     const args = embed.mock.calls[0]![0] as string[];
     expect(args).toContain('b');
     expect(args).not.toContain('a');
+  });
+
+  it('caps the cache at maxCacheSize via LRU eviction', async () => {
+    const embed = vi.fn(async (texts: string[]) => texts.map(() => [1, 0]));
+    const score = createEmbeddingScorer({
+      embed,
+      cacheKey: 'cache-lru',
+      maxCacheSize: 3,
+    });
+
+    // 5 unique messages + 1 task = 6 unique cache entries we try to store.
+    // With a cap of 3 only the most-recent 3 should survive.
+    await score(
+      [
+        { role: 'user', content: 'a' },
+        { role: 'user', content: 'b' },
+        { role: 'user', content: 'c' },
+        { role: 'user', content: 'd' },
+        { role: 'user', content: 'e' },
+      ],
+      'task'
+    );
+
+    expect(_embeddingCacheSize()).toBeLessThanOrEqual(3);
+  });
+
+  it('disables caching when maxCacheSize is 0', async () => {
+    const embed = vi.fn(async (texts: string[]) => texts.map(() => [1, 0]));
+    const score = createEmbeddingScorer({
+      embed,
+      cacheKey: 'cache-disabled',
+      maxCacheSize: 0,
+    });
+
+    await score([{ role: 'user', content: 'a' }], 'task');
+    expect(_embeddingCacheSize()).toBe(0);
+
+    // Second call must re-embed because nothing was cached.
+    embed.mockClear();
+    await score([{ role: 'user', content: 'a' }], 'task');
+    expect(embed).toHaveBeenCalled();
   });
 
   it('returns zeros for an empty task string', async () => {

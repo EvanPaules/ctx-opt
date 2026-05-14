@@ -16,13 +16,33 @@ Opens on http://localhost:5173. The playground imports ctx-opt directly
 from `../src/` via a Vite alias, so changes to the library are reflected
 immediately.
 
-## Deploy
+## Deploy to Vercel
 
 ```bash
+# One-time setup if you don't have vercel CLI:
+npm install -g vercel
+
+# From the playground/ directory:
 npm run build
-# dist/ is a static SPA. Deploy with vercel, netlify, gh-pages, anything.
-vercel deploy --prod ./dist
+vercel deploy --prod dist
 ```
+
+Vercel will prompt for project linking the first time, then return a
+public URL. Put it in the main README's playground link.
+
+## Deploy to Netlify
+
+```bash
+npm install -g netlify-cli
+npm run build
+netlify deploy --prod --dir dist
+```
+
+## Deploy via GitHub Pages
+
+`npm run build` produces a fully-static `dist/` directory. Push that to
+a `gh-pages` branch with your tool of choice and serve it from
+`https://<user>.github.io/<repo>/playground`.
 
 ## What it shows
 

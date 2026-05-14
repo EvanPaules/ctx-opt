@@ -108,7 +108,9 @@ summarizer-with-real-LLM, and LangChain.js integrations.
 | `hybrid`         | Slow      | Best      | Yes (both)      | Production: relevance-filter first, then summarize the rest if still over budget. |
 
 All strategies preserve the system prompt by default and never split a tool-use /
-tool-result pair across the boundary.
+tool-result pair across the boundary. Multi-modal content (images, files, audio)
+is preserved verbatim through optimization via the `passthrough` content-block
+type; the messages reach the LLM unmodified even if ctx-opt trims around them.
 
 ### Benchmarks
 
@@ -156,12 +158,17 @@ interface OptimizerConfig {
     llmCall: SummarizerLLMFn;           // your LLM call — see "Plugging in your LLM"
     maxSummaryTokens?: number;          // default: 400
     triggerThreshold?: number;          // 0..1, default: 0.85
+    recentWindow?: number;              // per-strategy override
+    onError?: 'fall-back' | 'throw' | ((err: unknown) => void); // default: 'fall-back'
   };
 
   relevance?: {
     scorer: RelevanceScorerFn;          // your scorer — returns one score per message
     minScore?: number;                  // default: 0.2
+    recentWindow?: number;              // per-strategy override
   };
+
+  pricing?: Record<string, { inputUsdPerMillion: number }>;     // override built-in pricing table
 }
 ```
 
@@ -310,6 +317,7 @@ Every call to `optimize()` returns a `meta` describing what happened:
 | `withinBudget`       | `true` if `outputTokens <= maxTokens`. |
 | `inputCostUsd`       | Dollar cost of the optimized input. Undefined if model pricing is unknown. |
 | `savedUsd`           | Dollars saved on input cost vs the unoptimized array. Undefined if model pricing is unknown. |
+| `fellBackTo`         | Set when the requested strategy couldn't run cleanly and fell back (e.g. summarizer's llmCall threw → falls back to `sliding-window`). |
 
 ## Token counting accuracy
 
@@ -335,6 +343,28 @@ const tokens = await countMessageTokensWithAnthropic(
   'claude-haiku-4-5-20251001'
 );
 ```
+
+## Status: pre-1.0
+
+`ctx-opt` is at `0.x`. The core API surface (`ContextOptimizer`,
+strategies, meta shape, SDK adapters) is settling but **breaking changes
+are still on the table** until 1.0. Each minor version (`0.4 -> 0.5`)
+may contain breaking changes; patch versions (`0.5.0 -> 0.5.1`) will
+not. The CHANGELOG calls out anything breaking explicitly.
+
+Pin to a minor version in production:
+
+```json
+"dependencies": { "ctx-opt": "~0.5.0" }
+```
+
+### Browser bundle
+
+The core works in the browser, but the underlying `js-tiktoken`
+encoding tables add **~2 MB** to your bundle. That's fine for an
+internal tool or a server-rendered app but not for a tightly
+performance-budgeted client. For client-side use, consider running
+optimization on the server and streaming the result down.
 
 ## Changelog
 

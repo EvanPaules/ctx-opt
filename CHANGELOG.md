@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-05-14
+
+This release is the "give it to a paying customer" hardening pass: the
+library now survives the real-world failure modes that would have bitten
+a production user on 0.4.
+
+### Added
+- **Multi-modal content preservation.** New `passthrough` ContentBlock
+  type carries provider-specific blocks (images, files, audio,
+  documents) verbatim through optimization. The OpenAI, Anthropic, and
+  Vercel AI SDK adapters now wrap unrecognized blocks in `passthrough`
+  on the way in and unwrap them on the way back to the SDK. Token
+  counting respects `passthrough.estimatedTokens` (defaults to 500;
+  per-block defaults to 850 for OpenAI images, 1500 for Anthropic
+  images, 1000 for AI SDK image/file parts).
+- **Configurable summarizer error recovery.** `summarizer.onError`
+  accepts `'fall-back'` (default), `'throw'`, or a custom handler. When
+  the LLM call fails, the optimizer falls back to `sliding-window` for
+  that call instead of throwing the user's request.
+- **LRU-capped embedding cache.** `createEmbeddingScorer` accepts
+  `maxCacheSize` (default 1000, set to 0 to disable). Cache evicts
+  least-recently-used entries when the cap is exceeded, fixing an
+  unbounded-memory issue in long-running processes.
+- **`meta.fellBackTo`** is now set whenever the requested strategy
+  couldn't run cleanly and fell back to another. Summarizer reports
+  `'sliding-window'` when there's no compressible material or when
+  `llmCall` errors and `onError` is `'fall-back'`. Hybrid reports the
+  final fallback when its three-phase pipeline still leaves the result
+  over budget.
+- **Status: pre-1.0 section** in README documenting breaking-change
+  policy and browser bundle-size caveat.
+- **Deploy instructions** for the playground (Vercel, Netlify,
+  GitHub Pages).
+
+### Changed
+- 21 → 101 tests across the 0.2 → 0.5 arc.
+
 ## [0.4.0] - 2026-05-14
 
 ### Added
@@ -103,6 +140,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tool-pair preservation across boundary trims.
 - ESM + CJS builds, TypeScript types, Node 18+.
 
+[0.5.0]: https://github.com/EvanPaules/ctx-opt/releases/tag/v0.5.0
 [0.4.0]: https://github.com/EvanPaules/ctx-opt/releases/tag/v0.4.0
 [0.2.0]: https://github.com/EvanPaules/ctx-opt/releases/tag/v0.2.0
 [0.1.0]: https://github.com/EvanPaules/ctx-opt/releases/tag/v0.1.0

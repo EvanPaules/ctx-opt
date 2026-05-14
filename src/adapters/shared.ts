@@ -54,12 +54,18 @@ function aiSdkContentToCtx(content: unknown): Message['content'] {
       const text =
         typeof p.result === 'string' ? p.result : JSON.stringify(p.result ?? '');
       blocks.push({ type: 'tool_result', tool_use_id: p.toolCallId, content: text });
+    } else if (p.type === 'image') {
+      blocks.push({ type: 'passthrough', raw: part, estimatedTokens: 1000, kind: 'image' });
+    } else if (p.type === 'file') {
+      blocks.push({ type: 'passthrough', raw: part, estimatedTokens: 1000, kind: 'file' });
+    } else if (p.type) {
+      blocks.push({ type: 'passthrough', raw: part, kind: p.type });
     }
   }
   return blocks.length > 0 ? blocks : '';
 }
 
-function ctxBlocksToAiSdkContent(role: Message['role'], blocks: ContentBlock[]): unknown {
+function ctxBlocksToAiSdkContent(_role: Message['role'], blocks: ContentBlock[]): unknown {
   return blocks.map((b) => {
     if (b.type === 'text') return { type: 'text', text: b.text };
     if (b.type === 'tool_use') {
@@ -73,6 +79,7 @@ function ctxBlocksToAiSdkContent(role: Message['role'], blocks: ContentBlock[]):
         result: b.content,
       };
     }
+    if (b.type === 'passthrough') return b.raw;
     return { type: 'text', text: '' };
   });
 }
@@ -111,9 +118,17 @@ function openAIContentToCtx(content: unknown): Message['content'] {
   if (!Array.isArray(content)) return '';
   const blocks: ContentBlock[] = [];
   for (const part of content) {
-    const p = part as { type?: string; text?: string };
+    const p = part as { type?: string; text?: string; image_url?: { detail?: string } };
     if (p.type === 'text' && typeof p.text === 'string') {
       blocks.push({ type: 'text', text: p.text });
+    } else if (p.type === 'image_url') {
+      // OpenAI image cost is roughly 85 (low detail) or up to ~1500 (high detail).
+      const detail = p.image_url?.detail;
+      const estimatedTokens = detail === 'low' ? 85 : 850;
+      blocks.push({ type: 'passthrough', raw: part, estimatedTokens, kind: 'image' });
+    } else if (p.type) {
+      // Unknown but typed block — preserve verbatim for round-trip.
+      blocks.push({ type: 'passthrough', raw: part, kind: p.type });
     }
   }
   return blocks.length > 0 ? blocks : '';
@@ -124,6 +139,7 @@ function ctxBlocksToOpenAIContent(blocks: ContentBlock[]): unknown {
     if (b.type === 'text') return { type: 'text', text: b.text };
     if (b.type === 'tool_use') return { type: 'text', text: `[tool_use:${b.name}] ${JSON.stringify(b.input)}` };
     if (b.type === 'tool_result') return { type: 'text', text: `[tool_result] ${b.content}` };
+    if (b.type === 'passthrough') return b.raw;
     return { type: 'text', text: '' };
   });
 }
@@ -208,6 +224,12 @@ function anthropicContentToCtx(content: unknown): Message['content'] {
     } else if (p.type === 'tool_result' && typeof p.tool_use_id === 'string') {
       const text = typeof p.content === 'string' ? p.content : flattenAnthropicResultContent(p.content);
       blocks.push({ type: 'tool_result', tool_use_id: p.tool_use_id, content: text });
+    } else if (p.type === 'image') {
+      blocks.push({ type: 'passthrough', raw: part, estimatedTokens: 1500, kind: 'image' });
+    } else if (p.type === 'document') {
+      blocks.push({ type: 'passthrough', raw: part, estimatedTokens: 1500, kind: 'document' });
+    } else if (p.type) {
+      blocks.push({ type: 'passthrough', raw: part, kind: p.type });
     }
   }
   return blocks.length > 0 ? blocks : '';
@@ -218,6 +240,7 @@ function ctxBlocksToAnthropicContent(blocks: ContentBlock[]): unknown {
     if (b.type === 'text') return { type: 'text', text: b.text };
     if (b.type === 'tool_use') return { type: 'tool_use', id: b.id, name: b.name, input: b.input };
     if (b.type === 'tool_result') return { type: 'tool_result', tool_use_id: b.tool_use_id, content: b.content };
+    if (b.type === 'passthrough') return b.raw;
     return { type: 'text', text: '' };
   });
 }

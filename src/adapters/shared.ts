@@ -2,6 +2,81 @@ import type { Message, ContentBlock } from '../types.js';
 
 export type AnyParams = Record<string, unknown>;
 
+export function aiSdkMessagesToCtx(input: unknown[]): Message[] {
+  return input.map((raw): Message => {
+    const m = raw as { role: string; content: unknown };
+    const role: Message['role'] = aiSdkRole(m.role);
+    return {
+      role,
+      content: aiSdkContentToCtx(m.content),
+    };
+  });
+}
+
+export function ctxMessagesToAiSdk(messages: Message[]): unknown[] {
+  return messages.map((m) => {
+    if (typeof m.content === 'string') {
+      return { role: m.role, content: m.content };
+    }
+    return { role: m.role, content: ctxBlocksToAiSdkContent(m.role, m.content) };
+  });
+}
+
+function aiSdkRole(role: string): Message['role'] {
+  if (role === 'system' || role === 'user' || role === 'assistant' || role === 'tool') {
+    return role;
+  }
+  return 'user';
+}
+
+function aiSdkContentToCtx(content: unknown): Message['content'] {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  const blocks: ContentBlock[] = [];
+  for (const part of content) {
+    const p = part as {
+      type?: string;
+      text?: string;
+      toolCallId?: string;
+      toolName?: string;
+      args?: unknown;
+      result?: unknown;
+    };
+    if (p.type === 'text' && typeof p.text === 'string') {
+      blocks.push({ type: 'text', text: p.text });
+    } else if (
+      p.type === 'tool-call' &&
+      typeof p.toolCallId === 'string' &&
+      typeof p.toolName === 'string'
+    ) {
+      blocks.push({ type: 'tool_use', id: p.toolCallId, name: p.toolName, input: p.args });
+    } else if (p.type === 'tool-result' && typeof p.toolCallId === 'string') {
+      const text =
+        typeof p.result === 'string' ? p.result : JSON.stringify(p.result ?? '');
+      blocks.push({ type: 'tool_result', tool_use_id: p.toolCallId, content: text });
+    }
+  }
+  return blocks.length > 0 ? blocks : '';
+}
+
+function ctxBlocksToAiSdkContent(role: Message['role'], blocks: ContentBlock[]): unknown {
+  return blocks.map((b) => {
+    if (b.type === 'text') return { type: 'text', text: b.text };
+    if (b.type === 'tool_use') {
+      return { type: 'tool-call', toolCallId: b.id, toolName: b.name, args: b.input };
+    }
+    if (b.type === 'tool_result') {
+      return {
+        type: 'tool-result',
+        toolCallId: b.tool_use_id,
+        toolName: 'unknown',
+        result: b.content,
+      };
+    }
+    return { type: 'text', text: '' };
+  });
+}
+
 export function toCtxMessagesFromOpenAI(input: unknown[]): Message[] {
   return input.map((raw): Message => {
     const m = raw as { role: string; content: unknown; name?: string; tool_call_id?: string };

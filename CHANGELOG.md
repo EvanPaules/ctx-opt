@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-05-14
+
+### Added
+- **Vercel AI SDK adapter** at `ctx-opt/ai-sdk`. `withOptimizer(fn, config)`
+  wraps any AI SDK function (`generateText`, `streamText`, `generateObject`,
+  `streamObject`) so its `messages` array is trimmed before forwarding.
+  Also ships `trimMessages(messages, config)` for callers that prefer a
+  one-shot preprocessor.
+- **Streaming support** in the OpenAI and Anthropic adapters. `stream: true`
+  on `chat.completions.create` / `messages.create` now correctly returns
+  the SDK's async-iterable stream after optimization. The Anthropic
+  adapter also wraps `client.messages.stream()`.
+- **Native Anthropic token counting** via `countMessageTokensWithAnthropic`,
+  which delegates to `client.messages.countTokens` for exact counts on
+  `claude-*` models. Tradeoff is a network round-trip per call versus
+  tiktoken's free local approximation.
+- **Per-strategy `recentWindow` overrides**. `relevance.recentWindow` and
+  `summarizer.recentWindow` can now be set independently of the top-level
+  `recentWindow`. This unblocks the hybrid strategy (see below).
+- `CONTRIBUTING.md`, GitHub issue templates, and a PR template.
+
+### Fixed
+- **Hybrid strategy now actually summarizes**. Previously the relevance
+  and summarizer phases shared `recentWindow`, so the post-relevance set
+  was entirely "system + recent" with nothing left for the summarizer to
+  compress. Setting `relevance.recentWindow` larger than
+  `summarizer.recentWindow` gives the summarizer real material. The
+  known-limitation note from 0.2.0 is resolved.
+
+### Changed
+- New peer dep: `ai` (optional, for the Vercel AI SDK adapter).
+- `tsup` now builds four entry points instead of three.
+
 ## [0.2.0] - 2026-05-14
 
 ### Added
@@ -38,8 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - In the `hybrid` strategy, `applyRelevance` and `applySummarizer`
   share `recentWindow`, so the post-relevance set rarely contains
   "compressible" messages for the summarizer to operate on, and the
-  pipeline falls through to a sliding-window pass. A future release
-  will let each phase have its own window.
+  pipeline falls through to a sliding-window pass. *Fixed in 0.3.0
+  via per-strategy `recentWindow` overrides.*
 
 ## [0.1.0] - 2026-05-01
 
@@ -52,5 +85,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tool-pair preservation across boundary trims.
 - ESM + CJS builds, TypeScript types, Node 18+.
 
+[0.3.0]: https://github.com/EvanPaules/ctx-opt/releases/tag/v0.3.0
 [0.2.0]: https://github.com/EvanPaules/ctx-opt/releases/tag/v0.2.0
 [0.1.0]: https://github.com/EvanPaules/ctx-opt/releases/tag/v0.1.0

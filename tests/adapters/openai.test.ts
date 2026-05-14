@@ -143,6 +143,40 @@ describe('openai adapter / withOptimizer', () => {
     expect(ai.lastMeta).toBeUndefined();
   });
 
+  it('forwards streaming requests with optimized messages', async () => {
+    // Mock SDK that returns an async iterable when stream: true.
+    const create = vi.fn(async (params: { stream?: boolean }) => {
+      if (params.stream) {
+        return (async function* () {
+          yield { choices: [{ delta: { content: 'a' } }] };
+          yield { choices: [{ delta: { content: 'b' } }] };
+        })();
+      }
+      return { id: 'res' };
+    });
+    const client = mkMockClient(create);
+    const ai = withOptimizer(client, {
+      maxTokens: 600,
+      strategy: 'sliding-window',
+      slidingWindow: { size: 4 },
+    });
+
+    const stream = (await ai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: longHistory(20),
+      stream: true,
+    })) as AsyncIterable<unknown>;
+
+    const chunks: unknown[] = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    expect(chunks.length).toBe(2);
+
+    // Verify messages were trimmed before the underlying call.
+    const forwarded = create.mock.calls[0]![0] as { messages: unknown[]; stream: boolean };
+    expect(forwarded.stream).toBe(true);
+    expect(forwarded.messages.length).toBeLessThan(21);
+  });
+
   it('exposes the wrapped client via .client', () => {
     const create = vi.fn(async () => ({}));
     const client = mkMockClient(create);

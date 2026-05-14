@@ -5,6 +5,10 @@ export {
   countMessageTokens,
   encodeText,
 } from './token-counter.js';
+export {
+  countMessageTokensWithAnthropic,
+  type AnthropicCountTokensCapable,
+} from './anthropic-tokens.js';
 export type {
   Role,
   Message,

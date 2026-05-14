@@ -159,6 +159,76 @@ describe('anthropic adapter / withOptimizer', () => {
     expect(ai.lastMeta).toBeUndefined();
   });
 
+  it('forwards messages.create with stream: true and optimizes messages', async () => {
+    const create = vi.fn(async (params: { stream?: boolean }) => {
+      if (params.stream) {
+        return (async function* () {
+          yield { type: 'content_block_delta', delta: { text: 'a' } };
+          yield { type: 'content_block_delta', delta: { text: 'b' } };
+        })();
+      }
+      return {};
+    });
+    const client = mkMockClient(create);
+    const ai = withOptimizer(client, {
+      maxTokens: 600,
+      strategy: 'sliding-window',
+      slidingWindow: { size: 4 },
+    });
+
+    const stream = (await ai.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 256,
+      system: 'sys',
+      messages: longHistory(20),
+      stream: true,
+    })) as AsyncIterable<unknown>;
+
+    const events: unknown[] = [];
+    for await (const event of stream) events.push(event);
+    expect(events.length).toBe(2);
+
+    const forwarded = create.mock.calls[0]![0] as { messages: unknown[]; stream: boolean };
+    expect(forwarded.stream).toBe(true);
+    expect(forwarded.messages.length).toBeLessThan(20);
+  });
+
+  it('wraps messages.stream() and optimizes messages before delegating', async () => {
+    const streamMock = vi.fn(() => ({
+      on: vi.fn(),
+      [Symbol.asyncIterator]: async function* () {
+        yield { type: 'message_start' };
+      },
+    }));
+    const create = vi.fn(async () => ({}));
+    const client: AnthropicLike = {
+      messages: { create, stream: streamMock },
+    };
+
+    const ai = withOptimizer(client, {
+      maxTokens: 600,
+      strategy: 'sliding-window',
+      slidingWindow: { size: 4 },
+    });
+
+    const streamP = (
+      ai.messages as unknown as {
+        stream: (p: unknown, o?: unknown) => Promise<unknown>;
+      }
+    ).stream({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 256,
+      system: 'sys',
+      messages: longHistory(20),
+    });
+    await streamP;
+
+    expect(streamMock).toHaveBeenCalledTimes(1);
+    const forwarded = streamMock.mock.calls[0]![0] as { messages: unknown[]; system?: string };
+    expect(forwarded.messages.length).toBeLessThan(20);
+    expect(forwarded.system).toBe('sys');
+  });
+
   it('handles content blocks (tool_use / tool_result) without losing them', async () => {
     const create = vi.fn(async () => ({}));
     const client = mkMockClient(create);

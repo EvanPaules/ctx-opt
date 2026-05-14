@@ -16,6 +16,7 @@ import {
 export interface AnthropicLike {
   messages: {
     create: (params: AnyParams, options?: unknown) => Promise<unknown> | unknown;
+    stream?: (params: AnyParams, options?: unknown) => unknown;
   };
 }
 
@@ -28,6 +29,7 @@ export interface OptimizedAnthropic<T extends AnthropicLike> {
   readonly lastMeta: OptimizeMeta | undefined;
   messages: {
     create: T['messages']['create'];
+    stream: T['messages'] extends { stream: infer S } ? S : never;
   };
 }
 
@@ -64,33 +66,53 @@ export function withOptimizer<T extends AnthropicLike>(
   const optimizer =
     config instanceof ContextOptimizer ? config : new ContextOptimizer(config);
 
+  async function optimizeParams(params: AnyParams): Promise<AnyParams | null> {
+    const rawMessages = params.messages;
+    if (!Array.isArray(rawMessages)) return null;
+
+    const ctxMessages = anthropicInputToCtx(params.system, rawMessages);
+    const { messages: optimized, meta } = await optimizer.optimize(ctxMessages);
+    wrapper.lastMeta = meta;
+
+    const split = ctxToAnthropicSplit(optimized);
+    const next: AnyParams = {
+      ...params,
+      messages: ctxMessagesToAnthropicInput(split.messages),
+    };
+    if (split.system !== undefined) {
+      next.system = split.system;
+    } else {
+      delete next.system;
+    }
+    return next;
+  }
+
   const wrapper = {
     client,
     optimizer,
     lastMeta: undefined as OptimizeMeta | undefined,
     messages: {
       create: async (params: AnyParams, options?: unknown) => {
-        const rawMessages = params.messages;
-        if (!Array.isArray(rawMessages)) {
-          return client.messages.create(params, options);
-        }
-
-        const ctxMessages = anthropicInputToCtx(params.system, rawMessages);
-        const { messages: optimized, meta } = await optimizer.optimize(ctxMessages);
-        wrapper.lastMeta = meta;
-
-        const split = ctxToAnthropicSplit(optimized);
-        const next: AnyParams = {
-          ...params,
-          messages: ctxMessagesToAnthropicInput(split.messages),
-        };
-        if (split.system !== undefined) {
-          next.system = split.system;
-        } else {
-          delete next.system;
-        }
+        const next = await optimizeParams(params);
+        if (next === null) return client.messages.create(params, options);
         return client.messages.create(next, options);
       },
+      // The SDK's stream() helper is sync (returns an event-emitter-style object).
+      // We still need to run optimization first, so we wrap the call in a
+      // thenable that awaits optimization before delegating. Most callers use
+      // `await client.messages.stream(...)` or attach handlers eagerly via
+      // .on() — for the latter case, we return a Promise that resolves to the
+      // underlying stream object.
+      stream: ((params: AnyParams, options?: unknown) => {
+        const streamFn = client.messages.stream;
+        if (typeof streamFn !== 'function') {
+          throw new Error('client.messages.stream is not available on this Anthropic client');
+        }
+        return (async () => {
+          const next = await optimizeParams(params);
+          return streamFn.call(client.messages, next ?? params, options);
+        })();
+      }) as never,
     },
   };
 

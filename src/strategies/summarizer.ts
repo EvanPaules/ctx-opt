@@ -28,7 +28,7 @@ export async function applySummarizer(
     throw new Error('summarizer config required for summarizer strategy');
   }
   const triggerThreshold = summarizer.triggerThreshold ?? 0.85;
-  const recentWindow = config.recentWindow ?? 6;
+  const recentWindow = summarizer.recentWindow ?? config.recentWindow ?? 6;
   const model = config.model;
 
   const inputTokens = countMessageTokens(messages, model);

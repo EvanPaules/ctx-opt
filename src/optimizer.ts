@@ -10,6 +10,7 @@ import { countMessageTokens } from './token-counter.js';
 import { applySlidingWindow } from './strategies/sliding-window.js';
 import { applySummarizer } from './strategies/summarizer.js';
 import { applyRelevance } from './strategies/relevance.js';
+import { resolvePricing, tokensToUsd } from './pricing.js';
 
 export class ContextOptimizer {
   private config: OptimizerConfig;
@@ -133,7 +134,8 @@ export class ContextOptimizer {
     messagesSummarized: number;
   }): OptimizeMeta {
     const saved = Math.max(0, args.inputTokens - args.outputTokens);
-    return {
+    const pricing = resolvePricing(this.config.model, this.config.pricing);
+    const meta: OptimizeMeta = {
       inputTokens: args.inputTokens,
       outputTokens: args.outputTokens,
       saved,
@@ -143,5 +145,10 @@ export class ContextOptimizer {
       messagesSummarized: args.messagesSummarized,
       withinBudget: args.outputTokens <= this.config.maxTokens,
     };
+    if (pricing) {
+      meta.inputCostUsd = tokensToUsd(args.outputTokens, pricing);
+      meta.savedUsd = tokensToUsd(saved, pricing);
+    }
+    return meta;
   }
 }

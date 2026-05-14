@@ -113,20 +113,30 @@ tool-result pair across the boundary.
 ### Benchmarks
 
 Reproducible workload: a 60-turn synthetic support conversation
-(9.8k input tokens), budget = 30% of input (2.9k tokens). Run
-`npm run bench` to regenerate.
+(9.8k input tokens), budget = 30% of input (2.9k tokens). Cost basis:
+gpt-4o ($2.50 per 1M input tokens). Run `npm run bench` to regenerate.
 
-| Strategy | Output tokens | Saved | Compression | Within budget | Time |
-|---|---:|---:|---:|:---:|---:|
-| `sliding-window` | 717 | 9,147 | 92.7% | yes | 11ms |
-| `summarizer` | 628 | 9,236 | 93.6% | yes | 23ms |
-| `relevance` | 2,644 | 7,220 | 73.2% | yes | 19ms |
-| `hybrid` | 2,644 | 7,220 | 73.2% | yes | 22ms |
+| Strategy | Output tokens | Saved | $ saved/call | $ saved/1k calls | Compression | Time |
+|---|---:|---:|---:|---:|---:|---:|
+| `sliding-window` | 717 | 9,147 | $0.02287 | **$22.87** | 92.7% | 10ms |
+| `summarizer` | 628 | 9,236 | $0.02309 | **$23.09** | 93.6% | 23ms |
+| `relevance` | 2,644 | 7,220 | $0.01805 | **$18.05** | 73.2% | 18ms |
+| `hybrid` | 2,644 | 7,220 | $0.01805 | **$18.05** | 73.2% | 21ms |
 
 Numbers are wall-clock on a single laptop with mock LLM + scorer (so they
 isolate `ctx-opt`'s own overhead from network latency). In production the
 LLM-using strategies will be dominated by the model round-trip, not
 ctx-opt.
+
+### Try it in your browser
+
+Open the [interactive playground](./playground) to paste a chat history
+and watch all four strategies trim it side-by-side, with live token and
+dollar savings.
+
+```bash
+cd playground && npm install && npm run dev
+```
 
 ## API
 
@@ -154,6 +164,60 @@ interface OptimizerConfig {
   };
 }
 ```
+
+### Built-in relevance scorers
+
+Don't want to write your own scorer? Two are shipped under `ctx-opt/scorers`:
+
+```ts
+import { ContextOptimizer } from 'ctx-opt';
+import { bm25Scorer, createEmbeddingScorer } from 'ctx-opt/scorers';
+
+// Pure-JS BM25 keyword scoring. Zero deps, zero network calls.
+new ContextOptimizer({
+  maxTokens: 8_000,
+  strategy: 'relevance',
+  relevance: { scorer: bm25Scorer(), minScore: 0.05 },
+});
+
+// Embedding-based scoring. Bring your own embed function.
+import OpenAI from 'openai';
+const openai = new OpenAI();
+new ContextOptimizer({
+  maxTokens: 8_000,
+  strategy: 'relevance',
+  relevance: {
+    scorer: createEmbeddingScorer({
+      embed: async (texts) => {
+        const res = await openai.embeddings.create({
+          model: 'text-embedding-3-small',
+          input: texts,
+        });
+        return res.data.map((d) => d.embedding);
+      },
+    }),
+    minScore: 0.3,
+  },
+});
+```
+
+The embedding scorer caches per-message vectors in-process so subsequent
+`optimize()` calls only embed new messages.
+
+### Cost tracking
+
+When `model` is set to a known model, `meta` includes the dollar cost
+of the optimized input and the dollars saved versus the unoptimized
+array:
+
+```ts
+const { meta } = await optimizer.optimize(history);
+console.log(`saved $${meta.savedUsd?.toFixed(4)} this call`);
+```
+
+Built-in pricing covers GPT-4o family, GPT-4 Turbo, GPT-3.5, o1/o3, the
+Claude 3.5 / 4.x family, and Gemini 1.5 / 2.0. Override or add your own
+via the `pricing` config option.
 
 ### `optimize(messages, input?)`
 
@@ -244,6 +308,8 @@ Every call to `optimize()` returns a `meta` describing what happened:
 | `messagesDropped`    | Number of messages removed from the array. |
 | `messagesSummarized` | Number of messages that were folded into a summary. |
 | `withinBudget`       | `true` if `outputTokens <= maxTokens`. |
+| `inputCostUsd`       | Dollar cost of the optimized input. Undefined if model pricing is unknown. |
+| `savedUsd`           | Dollars saved on input cost vs the unoptimized array. Undefined if model pricing is unknown. |
 
 ## Token counting accuracy
 

@@ -6,6 +6,7 @@ export default defineConfig({
     'adapters/openai': 'src/adapters/openai.ts',
     'adapters/anthropic': 'src/adapters/anthropic.ts',
     'adapters/ai-sdk': 'src/adapters/ai-sdk.ts',
+    'scorers/index': 'src/scorers/index.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,
